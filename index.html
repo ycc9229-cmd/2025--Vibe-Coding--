@@ -65,23 +65,25 @@
 </head>
 <body class="pb-36">
 
-    <!-- 標題視覺 -->
+    <!-- 頂部標題視覺 -->
     <header class="pt-10 pb-6 text-center relative max-w-4xl mx-auto flex flex-col items-center px-4">
         <div class="relative inline-block">
-            <h1 class="text-5xl md:text-6xl font-black text-[#FF85A1] tracking-tighter drop-shadow-sm italic">旅色筆記</h1>
+            <h1 class="text-5xl md:text-6xl font-black text-[#FF85A1] tracking-tighter drop-shadow-sm italic text-shadow-sm">旅色筆記</h1>
             <div class="absolute -right-4 -top-2 w-6 h-6 bg-[#FFD1A4] rounded-full opacity-60 animate-pulse"></div>
         </div>
-        <p class="text-[10px] text-slate-400 font-bold tracking-[0.4em] mt-1 opacity-70 uppercase">Global peak Edition Pro</p>
+        <p id="current-location-display" class="text-[10px] text-slate-400 font-bold tracking-[0.4em] mt-1 opacity-70 uppercase">Global Peak Edition Pro</p>
         
-        <button class="absolute right-6 top-10 w-11 h-11 bg-white rounded-2xl shadow-md flex items-center justify-center text-[#FF85A1] border border-slate-100 btn-active transition-transform">
+        <!-- 用戶頭像按鈕 (Google 登入連動) -->
+        <button id="user-auth-btn" onclick="handleAuthAction()" class="absolute right-6 top-10 w-11 h-11 bg-white rounded-2xl shadow-md flex items-center justify-center text-[#FF85A1] border border-slate-100 btn-active transition-transform overflow-hidden">
             <i data-lucide="user-round" class="w-5 h-5"></i>
         </button>
     </header>
 
     <main id="main-content" class="px-5 md:px-8 max-w-4xl mx-auto">
+        <!-- 初始同步載入狀態 -->
         <div class="flex flex-col items-center justify-center py-32 text-slate-300">
             <div class="animate-spin mb-4 text-[#FF85A1]"><i data-lucide="loader-2" class="w-10 h-10"></i></div>
-            <p class="font-black tracking-widest text-sm uppercase">正在確認地理位置...</p>
+            <p class="font-black tracking-widest text-sm uppercase">正在確認地理位置與同步資料...</p>
         </div>
     </main>
 
@@ -90,7 +92,7 @@
         <i data-lucide="navigation" class="w-7 h-7" fill="currentColor"></i>
     </button>
 
-    <!-- 底部導覽列 -->
+    <!-- 六分頁導覽列 -->
     <nav class="fixed bottom-6 left-1/2 -translate-x-1/2 w-[94%] max-w-lg glass rounded-[2.5rem] p-1.5 shadow-2xl flex justify-between items-center z-50 border border-white/50">
         <button onclick="switchTab('home')" id="nav-home" class="nav-btn flex flex-col items-center justify-center p-2 rounded-2xl transition-all duration-300 flex-1 min-w-0 text-slate-400">
             <i data-lucide="compass" class="w-5 h-5"></i>
@@ -118,21 +120,19 @@
         </button>
     </nav>
 
-    <!-- 層級化地區選取抽屜 -->
+    <!-- 地區選取器 -->
     <div id="region-picker" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-end justify-center hidden opacity-0 transition-opacity duration-300">
         <div class="bg-white w-full max-w-lg rounded-t-[3rem] p-8 shadow-2xl translate-y-full transition-transform duration-500 overflow-hidden relative border-t-4 border-[#FF85A1]/20">
             <div class="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
-            
             <div class="flex gap-2 mb-4">
                 <div class="flex-1 relative">
                     <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i>
-                    <input type="text" id="picker-search" oninput="handlePickerSearch(this.value)" class="w-full bg-slate-100 p-3 pl-11 rounded-2xl outline-none focus:ring-2 focus:ring-[#FF85A1]/20 font-bold text-sm" placeholder="全域搜尋城市或國家...">
+                    <input type="text" id="picker-search" oninput="handlePickerSearch(this.value)" class="w-full bg-slate-100 p-3 pl-11 rounded-2xl outline-none focus:ring-2 focus:ring-[#FF85A1]/20 font-bold text-sm" placeholder="搜尋全球城市(例:紐約、曼谷、倫敦)...">
                 </div>
-                <button onclick="detectLocation()" class="bg-[#8EC5FC] text-white p-3 rounded-2xl active:scale-90 transition-all">
+                <button onclick="detectLocation()" class="bg-[#8EC5FC] text-white p-3 rounded-2xl active:scale-90 transition-all shadow-sm">
                     <i data-lucide="locate-fixed" class="w-5 h-5"></i>
                 </button>
             </div>
-
             <div id="picker-content" class="max-h-[50vh] overflow-y-auto no-scrollbar"></div>
             <button onclick="closePicker()" class="w-full mt-6 py-4 bg-slate-100 rounded-2xl font-bold text-slate-400 active:scale-95 transition-all">取消</button>
         </div>
@@ -140,32 +140,13 @@
 
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, GoogleAuthProvider, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
         import { getFirestore, collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, getDocs } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
-        const safeGetConfig = () => {
-            try { return window['__firebase_config'] ? JSON.parse(window['__firebase_config']) : null; }
-            catch (e) { return null; }
-        };
-
-        const config = safeGetConfig();
-        const appId = window['__app_id'] || 'travel-palette-global-v3';
-
-        let db, auth;
-        let currentUser = null;
-        let activeTab = 'home';
-        let isDemoMode = !config; 
-        
-        window.state = {
-            calories: [], itineraries: [], journals: [], checklist: [], favorites: [],
-            folders: ["預設收藏"], activeFolder: "預設收藏", activeItinTab: 'personal',
-            activeRegion: '台北', activeCountry: '台灣', selectedGuide: null, selectedSpot: null, showAdventure: true,
-            pickerStep: 'continent', selectedContinent: null, selectedCountry: null, searchQuery: ''
-        };
-
+        // --- 全域資料庫 ---
         const geoData = [
             { continent: "東亞", icon: "🌏", countries: [
-                { name: "台灣", cities: ["台北", "台中", "高雄", "台南", "宜蘭", "花蓮"] },
+                { name: "台灣", cities: ["台北", "台中", "高雄", "台南", "花蓮"] },
                 { name: "日本", cities: ["東京", "大阪", "京都", "北海道", "沖繩", "福岡"] },
                 { name: "韓國", cities: ["首爾", "釜山", "濟州島"] }
             ]},
@@ -175,12 +156,12 @@
                 { name: "馬來西亞", cities: ["吉隆坡", "檳城"] }
             ]},
             { continent: "歐洲", icon: "🏰", countries: [
-                { name: "英國", cities: ["倫敦", "曼徹斯特"] },
+                { name: "英國", cities: ["倫敦", "曼徹斯特", "愛丁堡"] },
                 { name: "法國", cities: ["巴黎", "馬賽"] },
                 { name: "義大利", cities: ["羅馬", "威尼斯"] }
             ]},
             { continent: "北美洲", icon: "🗽", countries: [
-                { name: "美國", cities: ["紐約", "洛杉磯", "拉斯維加斯"] }
+                { name: "美國", cities: ["紐約", "洛杉磯", "拉斯維加斯", "西雅圖"] }
             ]}
         ];
 
@@ -188,107 +169,166 @@
             "台北": {
                 country: "台灣",
                 spot: [
-                    {n:"台北 101", s:"4.9", d:"曾為世界第一高樓，擁有震撼的觀景台。", l:"台北市信義區信義路五段7號", img:"https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800"},
-                    {n:"國立故宮博物院", s:"4.9", d:"收藏全球最豐富的中華藝術瑰寶。", l:"台北市士林區至善路二段221號", img:"https://images.unsplash.com/photo-1552056123-28b02382746a?w=800"},
-                    {n:"象山親山步道", s:"4.7", d:"拍攝台北 101 全景的最佳地點。", l:"台北市信義區"},
-                    {n:"西門町商圈", s:"4.6", d:"台北流行文化的聚點與美食天堂。", l:"台北市萬華區"},
-                    {n:"龍山寺", s:"4.8", d:"歷史悠久且建築精美的古老廟宇。", l:"台北市萬華區廣州街211號"},
-                    {n:"大稻埕", s:"4.7", d:"充滿懷舊氛圍的老街與文創空間。", l:"台北市大同區"},
-                    {n:"中正紀念堂", s:"4.6", d:"壯麗的白牆藍瓦建築與廣大公園。", l:"台北市中正區"},
-                    {n:"北投溫泉", s:"4.8", d:"硫磺繚繞的城市溫泉秘境。", l:"台北市北投區"},
-                    {n:"士林夜市", s:"4.5", d:"聞名國際的大型觀光夜市。", l:"台北市士林區"},
-                    {n:"陽明山國家公園", s:"4.9", d:"四季分明的火山地貌自然景觀。", l:"台北市北投區"}
+                    {n:"國立故宮博物院", s:"4.9", d:"收藏全球最豐富的中華藝術瑰寶，必訪歷史寶庫。", l:"台北市士林區至善路二段221號", img:"https://images.unsplash.com/photo-1583321500900-82807e458f3c?w=800"},
+                    {n:"台北 101", s:"4.9", d:"曾為世界第一高樓，擁有震撼的觀景台俯瞰台北盆地。", l:"台北市信義區信義路五段7號", img:"https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800"},
+                    {n:"龍山寺", s:"4.8", d:"香火鼎盛的古老廟宇，展現精美傳統建築藝術。", l:"台北市萬華區廣州街211號", img:"https://images.unsplash.com/photo-1528641151602-5e608035029b?w=800"},
+                    {n:"中正紀念堂", s:"4.6", d:"宏偉的藍瓦白牆建築，衛兵交接儀式震撼人心。", l:"台北市中正區", img:"https://images.unsplash.com/photo-1534430480872-3498386e7a56?w=800"},
+                    {n:"西門町", s:"4.6", d:"台北流行文化核心，充滿潮流店鋪與多樣小吃。", l:"台北市萬華區", img:"https://images.unsplash.com/photo-1510379872535-9310dc6fd6a7?w=800"},
+                    {n:"象山步道", s:"4.7", d:"拍攝台北 101 全景與都市夕陽的最佳視角地點。", img:"https://images.unsplash.com/photo-1570116494159-1e39e557b778?w=800"}
                 ],
                 food: [
-                    {n:"鼎泰豐 (信義店)", s:"4.9", d:"黃金比例 18 摺小籠包精品。"},
-                    {n:"阜杭豆漿", s:"4.7", d:"超人氣經典中式排隊早餐。"},
-                    {n:"寧夏夜市 (小吃)", s:"4.8", d:"台北老字號美食的匯集地。"}
+                    {n:"鼎泰豐 (信義店)", s:"4.9", d:"黃金比例 18 摺小籠包，國際級的美食代名詞。", img:"https://images.unsplash.com/photo-1563245339-6b2e4428546a?w=800"},
+                    {n:"寧夏夜市", s:"4.8", d:"在地人最推的夜市，大橋頭麻糬、滷肉飯必吃。", img:"https://images.unsplash.com/photo-1571997478779-2adcbbe9bb2f?w=800"}
                 ]
             },
             "東京": {
                 country: "日本",
                 spot: [
-                    {n:"淺草寺", s:"4.9", d:"東京都內最古老的寺院，地標雷門必拍。", l:"東京都台東區淺草2-3-1", img:"https://images.unsplash.com/photo-1545569341-9eb8b30979d9?w=800"},
-                    {n:"東京鐵塔", s:"4.8", d:"象徵東京的精神與極致夜景地標。", l:"東京都港區芝公園", img:"https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800"},
-                    {n:"明治神宮", s:"4.7", d:"鬧區中的寧靜森林，莊嚴壯麗。", l:"東京都澀谷區"},
-                    {n:"澀谷 Sky", s:"4.9", d:"全新展望台，俯瞰著名的澀谷十字路口。"},
-                    {n:"新宿御苑", s:"4.7", d:"結合日式、英式與法式風格的廣大園林。"},
-                    {n:"上野恩賜公園", s:"4.6", d:"博物館與美術館林立的文化核心區。"},
-                    {n:"秋葉原電器街", s:"4.5", d:"二次元文化與科技愛好者的聖地。"},
-                    {n:"六本木之丘", s:"4.7", d:"時尚藝術中心，觀景視角極佳。"},
-                    {n:"築地外市場", s:"4.8", d:"在地海鮮美食與職人精神的集散地。"},
-                    {n:"皇居", s:"4.6", d:"天皇住所，歷史古堡與護城河景色優美。"}
+                    {n:"淺草寺", s:"4.9", d:"東京最古老的寺院，地標「雷門」紅燈籠所在地。", l:"東京都台東區淺草", img:"https://images.unsplash.com/photo-1545569341-9eb8b30979d9?w=800"},
+                    {n:"東京鐵塔", s:"4.8", d:"經典紅色鋼鐵建築，象徵東京的永恆精神。", l:"東京都港區芝公園", img:"https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800"},
+                    {n:"明治神宮", s:"4.7", d:"繁忙鬧區中的大片寧靜森林，莊嚴肅穆。", l:"東京都澀谷區", img:"https://images.unsplash.com/photo-1557050543-4d5f4e07ef46?w=800"},
+                    {n:"澀谷 Sky", s:"4.9", d:"全新的高空展望台，360度俯瞰著名的十字路口。", img:"https://images.unsplash.com/photo-1542051841857-5f90071e7989?w=800"}
+                ],
+                food: [
+                    {n:"築地市場壽司", s:"4.9", d:"享受最頂級的海鮮刺身，職人現場捏製。", img:"https://images.unsplash.com/photo-1552056123-28b02382746a?w=800"}
+                ]
+            },
+            "曼谷": {
+                country: "泰國",
+                spot: [
+                    {n:"曼谷大皇宮", s:"4.9", d:"泰國王室最神聖且金碧輝煌的代表性建築群。", img:"https://images.unsplash.com/photo-1510379872535-9310dc6fd6a7?w=800"},
+                    {n:"鄭王廟", s:"4.8", d:"著名的黎明寺，河畔莊嚴壯麗的白色寶塔。", img:"https://images.unsplash.com/photo-1544013919-4b42cc5a394a?w=800"}
+                ],
+                food: [
+                    {n:"建興酒家", s:"4.8", d:"經典咖哩螃蟹，曼谷必嚐的海鮮料理。", img:"https://images.unsplash.com/photo-1559339352-11d035aa65de?w=800"}
                 ]
             }
         };
 
-        const init = async () => {
-            // 首先啟動定位
-            await detectLocation();
+        // --- 初始化狀態 ---
+        const config = (function() {
+            try { return window['__firebase_config'] ? JSON.parse(window['__firebase_config']) : null; }
+            catch (e) { return null; }
+        })();
+        const appId = window['__app_id'] || 'travel-palette-global-v10';
+        let dbInstance, authInstance;
+        let currentUser = null;
+        let activeTab = 'home';
+        let isDemoMode = !config; 
 
-            if (isDemoMode) { render(); return; }
-            try {
-                const appInstance = initializeApp(config);
-                auth = getAuth(appInstance);
-                db = getFirestore(appInstance);
-                const token = window['__initial_auth_token'];
-                if (token) await signInWithCustomToken(auth, token);
-                else await signInAnonymously(auth);
-                onAuthStateChanged(auth, (user) => {
-                    currentUser = user;
-                    if (user) setupListeners();
-                    render();
-                });
-            } catch (e) { isDemoMode = true; render(); }
+        window.state = {
+            calories: [], itineraries: [], journals: [], checklist: [], favorites: [],
+            folders: ["預設收藏"], activeFolder: "預設收藏", activeItinTab: 'personal',
+            activeRegion: '台北', activeCountry: '台灣', selectedGuide: null, selectedSpot: null, showAdventure: true,
+            pickerStep: 'continent', selectedContinent: null, selectedCountry: null, searchQuery: ''
         };
 
-        // --- 地理定位系統 ---
-        window.detectLocation = () => {
-            return new Promise((resolve) => {
-                if (!navigator.geolocation) {
-                    console.log("不支援定位");
-                    resolve();
-                } else {
-                    navigator.geolocation.getCurrentPosition(
-                        (position) => {
-                            // 模擬簡單經緯度比對邏輯 (實務上會接 API)
-                            // 這裡直接示範成功取得位置後的預設更新
-                            state.activeRegion = "台北"; // 預設所在地
-                            state.activeCountry = "台灣";
-                            render();
-                            resolve();
-                        },
-                        (error) => {
-                            console.log("定位權限遭拒或失敗", error);
-                            resolve();
-                        },
-                        { timeout: 5000 }
-                    );
+        // --- 功能函數 ---
+
+        function handleImageError(img) {
+            img.onerror = null;
+            img.src = 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800';
+        }
+        window.handleImageError = handleImageError;
+
+        function updateUserUI(user) {
+            const btn = document.getElementById('user-auth-btn');
+            if (user && !user.isAnonymous && user.photoURL) {
+                btn.innerHTML = `<img src="${user.photoURL}" class="w-full h-full object-cover">`;
+            } else {
+                btn.innerHTML = `<i data-lucide="user-round" class="w-5 h-5"></i>`;
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            }
+        }
+        window.updateUserUI = updateUserUI;
+
+        window.handleAuthAction = async () => {
+            if (isDemoMode) { alert("目前為展示模式，請佈署完成後連動 Google 帳號。"); return; }
+            if (currentUser && !currentUser.isAnonymous) {
+                if (confirm("確定要登出並切換帳號嗎？")) { await signOut(authInstance); location.reload(); }
+            } else {
+                const provider = new GoogleAuthProvider();
+                try { await signInWithPopup(authInstance, provider); } catch (e) { console.error(e); }
+            }
+        };
+
+        // --- 視圖組件 ---
+
+        const renderSpotDetail = () => {
+            const s = state.selectedSpot;
+            return `
+                <div class="space-y-6 fade-in pb-10">
+                    <button onclick="window.state.selectedSpot=null; render()" class="flex items-center gap-2 text-slate-400 font-bold hover:text-[#FF85A1] active:scale-95 transition-all">
+                        <i data-lucide="arrow-left"></i> 返回清單
+                    </button>
+                    <div class="bg-white rounded-[3rem] overflow-hidden shadow-xl border border-slate-50">
+                        <div class="h-64 relative">
+                            <img src="${s.img || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800'}" onerror="handleImageError(this)" class="w-full h-full object-cover">
+                            <div class="absolute inset-0 spot-card-gradient"></div>
+                            <div class="absolute bottom-6 left-8 text-white">
+                                <span class="text-[9px] font-black uppercase tracking-widest bg-white/20 px-2 py-1 rounded-full border border-white/20">${state.activeCountry} | ${state.activeRegion}</span>
+                                <h2 class="text-3xl font-black mt-2 leading-tight">${s.n}</h2>
+                                <div class="flex items-center gap-1 mt-2 text-yellow-400"><i data-lucide="star" class="w-4 h-4 fill-current"></i><span class="font-bold text-white">${s.s || '4.8'} / 5.0</span></div>
+                            </div>
+                        </div>
+                        <div class="p-8 space-y-6">
+                            <section><h3 class="text-xs font-black text-slate-300 uppercase mb-3 tracking-widest">關於地點</h3><p class="text-slate-600 leading-relaxed font-medium text-sm">${s.d || '這是一個極受歡迎的推薦地點，值得您前往親自體驗其獨特氛圍。'}</p></section>
+                            <section class="bg-slate-50 p-6 rounded-3xl border border-slate-100">
+                                <h3 class="text-xs font-black text-slate-400 uppercase mb-3 tracking-widest">地址/位置</h3>
+                                <div class="flex items-start gap-3">
+                                    <i data-lucide="map-pin" class="w-5 h-5 text-[#8EC5FC] flex-shrink-0 mt-0.5"></i>
+                                    <p class="text-slate-700 font-bold text-sm">${s.l || '所在區域內'}</p>
+                                </div>
+                            </section>
+                            <div class="grid grid-cols-2 gap-4">
+                                <button onclick="window.open('https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.n + ' ' + state.activeRegion)}')" class="bg-[#8EC5FC] text-white py-4 rounded-2xl font-black shadow-lg active:scale-95 flex items-center justify-center gap-2"><i data-lucide="navigation" class="w-5 h-5"></i> 導航</button>
+                                <button onclick="toggleFav('${s.n}', '${s.img || ''}')" class="bg-[#FF85A1] text-white py-4 rounded-2xl font-black shadow-lg active:scale-95 flex items-center justify-center gap-2"><i data-lucide="heart" class="w-5 h-5" ${state.favorites.some(f=>f.name===s.n)?'fill="white"':''}></i> 收藏</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+        };
+
+        const renderGuideDetail = () => {
+            const guide = state.selectedGuide;
+            const data = rankingData[state.activeRegion] || { spot: [], food: [] };
+            let items = guide.id === 'spot' ? [...(data.spot || [])] : [...(data.food || [])];
+            
+            if (items.length < 10) {
+                const dummyNames = guide.id === 'spot' ? ['景觀公園','觀景台','文化特區','週末市集','秘密廊道'] : ['排隊美食','在地老字號','人氣甜點','職人咖啡'];
+                for (let i = items.length; i < 10; i++) {
+                    items.push({n: `${state.activeRegion}${dummyNames[i % dummyNames.length]}`, s: (4.9 - i * 0.1).toFixed(1), d: "這是為您推薦的優質地點，點擊查看詳細內容。"});
                 }
-            });
+            }
+
+            return `
+                <div class="space-y-6 fade-in pb-10">
+                    <div class="flex justify-between items-center">
+                        <button onclick="window.state.selectedGuide=null; render()" class="flex items-center gap-2 text-slate-400 font-bold hover:text-[#FF85A1] active:scale-95 transition-all"><i data-lucide="arrow-left"></i> 返回</button>
+                        <button onclick="openRegionPicker()" class="px-4 py-2 bg-white border border-slate-100 rounded-full text-xs font-black text-[#FF85A1] shadow-sm flex items-center gap-1 active:scale-95 transition-all"><i data-lucide="map-pin" class="w-3 h-3"></i> ${state.activeRegion}</button>
+                    </div>
+                    <div class="${guide.color} p-8 rounded-[2.5rem] text-white shadow-xl relative overflow-hidden">
+                        <h2 class="text-3xl font-black">${guide.title}</h2>
+                        <p class="font-bold opacity-80 mt-1 uppercase tracking-widest">${state.activeCountry} | TOP 10</p>
+                        <div class="absolute top-4 right-4 text-7xl opacity-20 transform rotate-12">${guide.img}</div>
+                    </div>
+                    <div class="space-y-3">
+                        ${items.map((it, idx) => `
+                            <div onclick="window.state.selectedSpot=${JSON.stringify(it).replace(/"/g, '&quot;')}; render()" class="bg-white p-5 rounded-[2.2rem] shadow-sm border border-slate-50 flex items-center gap-5 cursor-pointer hover:bg-slate-50 active:scale-95 group transition-all">
+                                <div class="w-12 h-12 ${idx<3?'bg-yellow-400':'bg-slate-100'} rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-inner">${idx+1}</div>
+                                <div class="flex-1">
+                                    <h4 class="font-black text-slate-700 leading-tight text-lg">${it.n}</h4>
+                                    <p class="text-[10px] text-slate-300 font-bold mt-1 uppercase tracking-widest">查看詳情介紹</p>
+                                </div>
+                                <div class="text-[#FF85A1] font-black text-2xl group-hover:translate-x-1 transition-transform">${it.s}</div>
+                            </div>`).join('')}
+                    </div>
+                </div>`;
         };
 
-        const setupListeners = () => {
-            if (!currentUser || !db) return;
-            const userRef = (col) => collection(db, 'artifacts', appId, 'users', currentUser.uid, col);
-            const err = (e) => console.warn(e);
-            onSnapshot(userRef('calories'), s => { state.calories = s.docs.map(d => ({id:d.id, ...d.data()})); if(activeTab==='calorie') render(); }, err);
-            onSnapshot(userRef('journals'), s => { state.journals = s.docs.map(d => ({id:d.id, ...d.data()})); if(activeTab==='journal') render(); }, err);
-            onSnapshot(userRef('itineraries'), s => { state.itineraries = s.docs.map(d => ({id:d.id, ...d.data()})); if(activeTab==='itinerary') render(); }, err);
-            onSnapshot(userRef('checklist'), s => { state.checklist = s.docs.map(d => ({id:d.id, ...d.data()})); if(activeTab==='checklist') render(); }, err);
-            onSnapshot(userRef('favorites'), s => { state.favorites = s.docs.map(d => ({id:d.id, ...d.data()})); if(activeTab==='favorite' || activeTab==='home') render(); }, err);
-            onSnapshot(userRef('folders'), s => { 
-                const f = s.docs.map(d => d.data().name);
-                state.folders = f.length > 0 ? f : ["預設收藏"];
-                if(activeTab==='favorite') render(); 
-            }, err);
-        };
-
-        window.switchTab = (tab) => { activeTab = tab; state.selectedGuide = null; state.selectedSpot = null; render(); };
-        window.render = () => {
+        window.render = function() {
             const main = document.getElementById('main-content');
             const mapBtn = document.getElementById('floating-map-btn');
-            
             if (activeTab === 'home' && !state.selectedGuide && !state.selectedSpot) mapBtn.classList.remove('hidden');
             else mapBtn.classList.add('hidden');
 
@@ -309,118 +349,66 @@
                     case 'checklist': main.innerHTML = renderChecklist(); break;
                 }
             }
-            lucide.createIcons();
-        };
-
-        // --- 詳情頁 ---
-        const renderSpotDetail = () => {
-            const s = state.selectedSpot;
-            return `
-                <div class="space-y-6 fade-in pb-10">
-                    <button onclick="window.state.selectedSpot=null; render()" class="flex items-center gap-2 text-slate-400 font-bold hover:text-[#FF85A1] active:scale-95 transition-all">
-                        <i data-lucide="arrow-left"></i> 返回清單
-                    </button>
-                    <div class="bg-white rounded-[3rem] overflow-hidden shadow-xl border border-slate-50">
-                        <div class="h-64 relative">
-                            <img src="${s.img || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800'}" class="w-full h-full object-cover">
-                            <div class="absolute inset-0 spot-card-gradient"></div>
-                            <div class="absolute bottom-6 left-8 text-white">
-                                <span class="text-[9px] font-black uppercase tracking-widest bg-white/20 px-2 py-1 rounded-full border border-white/20">${state.activeCountry} | ${state.activeRegion}</span>
-                                <h2 class="text-3xl font-black mt-2">${s.n}</h2>
-                                <div class="flex items-center gap-1 mt-2 text-yellow-400"><i data-lucide="star" class="w-4 h-4 fill-current"></i><span class="font-bold text-white">${s.s} / 5.0</span></div>
-                            </div>
-                        </div>
-                        <div class="p-8 space-y-6">
-                            <section><h3 class="text-xs font-black text-slate-300 uppercase tracking-widest mb-3">亮點介紹</h3><p class="text-slate-600 leading-relaxed font-medium text-sm">${s.d}</p></section>
-                            <section class="bg-slate-50 p-6 rounded-3xl"><h3 class="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">地址位置</h3><div class="flex items-start gap-3"><i data-lucide="map-pin" class="w-5 h-5 text-[#8EC5FC] flex-shrink-0"></i><p class="text-slate-700 font-bold text-sm">${s.l || '所在城市區域內'}</p></div></section>
-                            <div class="grid grid-cols-2 gap-4">
-                                <button onclick="window.open('https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.n + ' ' + state.activeRegion)}')" class="bg-[#8EC5FC] text-white py-4 rounded-2xl font-black shadow-lg active:scale-95 flex items-center justify-center gap-2"><i data-lucide="navigation" class="w-5 h-5"></i> 導航</button>
-                                <button onclick="toggleFav('${s.n}', '${s.img || ''}')" class="bg-[#FF85A1] text-white py-4 rounded-2xl font-black shadow-lg active:scale-95 flex items-center justify-center gap-2"><i data-lucide="heart" class="w-5 h-5" ${state.favorites.some(f=>f.name===s.n)?'fill="white"':''}></i> 收藏</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>`;
-        };
-
-        // --- 排行榜 ---
-        const renderGuideDetail = () => {
-            const guide = state.selectedGuide;
-            const data = rankingData[state.activeRegion] || { spot: [], food: [] };
-            let items = guide.id === 'spot' ? data.spot : data.food;
-            
-            // 補足 10 項
-            if (items.length < 10) {
-                const dummyNames = guide.id === 'spot' ? ['觀景公園', '地標大樓', '特色街道', '文化藝術中心', '神秘步道', '週末市集', '觀景餐廳', '市民廣場', '歷史陳列館', '河畔公園'] : ['必吃拉麵', '道地燒肉', '人氣甜點', '巷弄咖啡', '深夜居酒屋', '職人手作', '傳統小吃', '海鮮名店', '創意料理', '排隊早餐'];
-                const fillerCount = items.length;
-                for (let i = fillerCount; i < 10; i++) {
-                    items.push({n: `${state.activeRegion}${dummyNames[i]}`, s: (4.9 - i * 0.1).toFixed(1), d: "這是為您推薦的優質旅遊地點，點擊查看詳細的地理位置與精彩介紹。", l: `${state.activeRegion}市中心特定區`});
-                }
-            }
-
-            return `
-                <div class="space-y-6 fade-in pb-10">
-                    <div class="flex justify-between items-center">
-                        <button onclick="window.state.selectedGuide=null; render()" class="flex items-center gap-2 text-slate-400 font-bold hover:text-[#FF85A1] active:scale-95 transition-all"><i data-lucide="arrow-left"></i> 返回</button>
-                        <button onclick="openRegionPicker()" class="px-4 py-2 bg-white border border-slate-100 rounded-full text-xs font-black text-[#FF85A1] shadow-sm flex items-center gap-1 active:scale-95 transition-all"><i data-lucide="map-pin" class="w-3 h-3"></i> ${state.activeCountry} | ${state.activeRegion}</button>
-                    </div>
-                    <div class="${guide.color} p-8 rounded-[2.5rem] text-white shadow-xl relative overflow-hidden">
-                        <h2 class="text-3xl font-black">${guide.title}</h2>
-                        <div class="absolute top-4 right-4 text-7xl opacity-20 transform rotate-12">${guide.img}</div>
-                    </div>
-                    <div class="space-y-3">
-                        ${items.map((it, idx) => `
-                            <div onclick="window.state.selectedSpot=${JSON.stringify(it).replace(/"/g, '&quot;')}; render()" class="bg-white p-5 rounded-[2.2rem] shadow-sm border border-slate-50 flex items-center gap-5 cursor-pointer hover:bg-slate-50 active:scale-95 transition-all group">
-                                <div class="w-12 h-12 ${idx<3?'bg-yellow-400':'bg-slate-100'} rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-inner">${idx+1}</div>
-                                <div class="flex-1"><h4 class="font-black text-slate-700 leading-tight">${it.n}</h4><p class="text-[10px] text-slate-300 font-bold mt-1 uppercase">點擊查看詳體</p></div>
-                                <div class="text-[#FF85A1] font-black text-2xl group-hover:translate-x-1 transition-transform">${it.s}</div>
-                            </div>`).join('')}
-                    </div>
-                </div>`;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
         };
 
         const renderHome = () => {
             const data = rankingData[state.activeRegion] || { spot: [], food: [] };
-            const localRecs = data.spot.slice(0, 3);
-            const displayRecs = localRecs.length > 0 ? localRecs.map(x => ({...x, r: state.activeRegion, c: state.activeCountry})) : [
-                {n:'京都清水寺', r:'京都', c:'日本', d:'京都最古老的寺院，舞台壯觀。', img:'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400', t:'歷史'},
-                {n:'曼谷大皇宮', r:'曼谷', c:'泰國', d:'泰國最具規模的王室建築群。', img:'https://images.unsplash.com/photo-1510379872535-9310dc6fd6a7?w=400', t:'建築'},
-                {n:'紐約自由女神', r:'紐約', c:'美國', d:'美國最知名的精神象徵。', img:'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=400', t:'地標'}
-            ];
+            
+            // 核心優化：優先從目前城市的排行榜中抓取具體的推薦項目 (包含圖片與名稱)
+            const combinedItems = [...(data.spot || []), ...(data.food || [])];
+            let displayRecs = [];
+
+            if (combinedItems.length > 0) {
+                // 若該城市有具體數據，則顯示真實的地點
+                displayRecs = combinedItems.slice(0, 6).map(x => ({
+                    ...x, 
+                    r: state.activeRegion, 
+                    c: state.activeCountry,
+                    t: data.spot.includes(x) ? '景點' : '必吃'
+                }));
+            } else {
+                // 若無數據，則顯示該城市專屬的導航卡片 (確保地點名稱正確)
+                displayRecs = [
+                    {n: `${state.activeRegion}觀光探索`, d: `發現${state.activeRegion}的隱藏之美，開啟一段全新的在地旅程。`, img: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800', t: '推薦'},
+                    {n: `${state.activeRegion}在地美食`, d: `品嚐屬於${state.activeRegion}的傳統風味，滿足您的味蕾。`, img: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=400', t: '美食'}
+                ];
+            }
 
             return `
-                <div class="space-y-8 fade-in">
+                <div class="space-y-8 fade-in pb-10">
                     <section>
                         <div class="flex justify-between items-end mb-4 px-1">
-                            <h3 class="text-xl font-black flex items-center gap-2"><div class="w-2 h-6 bg-[#FF85A1] rounded-full"></div>${state.activeCountry} | 今日推薦</h3>
-                            <button onclick="openRegionPicker()" class="text-xs font-black text-[#FF85A1] active:scale-95 transition-all">更換地區 ▾</button>
+                            <h3 class="text-xl font-black flex items-center gap-2"><div class="w-2 h-6 bg-[#FF85A1] rounded-full"></div>${state.activeRegion} | 今日推薦</h3>
+                            <button onclick="openRegionPicker()" class="text-xs font-black text-[#FF85A1] active:scale-95 transition-all">更換城市 ▾</button>
                         </div>
                         <div class="flex overflow-x-auto gap-4 pb-4 no-scrollbar -mx-5 px-5 snap-x">
                             ${displayRecs.map(s => `
-                                <div onclick="window.state.selectedSpot=${JSON.stringify(s).replace(/"/g, '&quot;')}; state.activeRegion='${s.r}'; state.activeCountry='${s.c || '台灣'}'; render()" class="min-w-[200px] h-64 relative rounded-[2.5rem] overflow-hidden shadow-lg snap-start cursor-pointer group active:scale-95 transition-all">
-                                    <img src="${s.img || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=400'}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700">
-                                    <div class="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
+                                <div onclick="window.state.selectedSpot=${JSON.stringify(s).replace(/"/g, '&quot;')}; render()" class="min-w-[200px] h-64 relative rounded-[2.5rem] overflow-hidden shadow-lg snap-start cursor-pointer group active:scale-95 transition-all">
+                                    <img src="${s.img || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=400'}" onerror="handleImageError(this)" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000">
+                                    <div class="absolute inset-0 spot-card-gradient"></div>
                                     <button onclick="event.stopPropagation(); toggleFav('${s.n}', '${s.img || ''}')" class="absolute top-4 right-4 p-2 bg-white/20 backdrop-blur-md rounded-full text-white active:scale-90 z-20 transition-all">
                                         <i data-lucide="heart" class="w-4 h-4" ${state.favorites.some(f=>f.name===s.n)?'fill="white"':''}></i>
                                     </button>
                                     <div class="absolute bottom-6 left-6 text-white">
-                                        <span class="text-[9px] bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-full uppercase font-bold border border-white/20">${s.t || '推薦'}</span>
-                                        <p class="text-lg font-black mt-2 leading-tight">${s.n}</p>
+                                        <span class="text-[9px] bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-full uppercase font-bold border border-white/20">${s.t || '熱門'}</span>
+                                        <p class="text-lg font-black mt-1 leading-tight">${s.n}</p>
                                     </div>
                                 </div>`).join('')}
                         </div>
                     </section>
 
                     <section class="space-y-4">
-                        <h3 class="text-xl font-black px-1">${state.activeRegion} 專屬排行榜</h3>
+                        <h3 class="text-xl font-black px-1">${state.activeRegion} 排行榜攻略</h3>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div onclick="openGuide({id:'spot', title:'熱門景點排行', color:'bg-[#8EC5FC]', img:'🏯'})" class="bg-white p-6 rounded-[2rem] shadow-sm flex items-center gap-5 cursor-pointer hover:shadow-md border border-slate-50 active:scale-95 transition-all">
+                            <div onclick="openGuide({id:'spot', title:'熱門景點排行', color:'bg-[#8EC5FC]', img:'🏯'})" class="bg-white p-6 rounded-[2rem] shadow-sm flex items-center gap-5 cursor-pointer hover:shadow-md border border-slate-50 active:scale-95">
                                 <div class="w-16 h-16 bg-[#8EC5FC] rounded-2xl flex items-center justify-center text-3xl shadow-inner">🏯</div>
-                                <div class="flex-1"><span class="text-[10px] font-bold text-gray-300 uppercase tracking-widest">地標</span><h4 class="font-black text-lg text-slate-700 leading-tight">景點排行</h4></div>
+                                <div class="flex-1"><span class="text-[10px] font-bold text-gray-300 uppercase">景點</span><h4 class="font-black text-lg text-slate-700 leading-tight">景點排行</h4></div>
                                 <i data-lucide="chevron-right" class="text-slate-200"></i>
                             </div>
-                            <div onclick="openGuide({id:'food', title:'必吃美食地圖', color:'bg-[#FFCCF9]', img:'🍣'})" class="bg-white p-6 rounded-[2rem] shadow-sm flex items-center gap-5 cursor-pointer hover:shadow-md border border-slate-50 active:scale-95 transition-all">
+                            <div onclick="openGuide({id:'food', title:'必吃美食地圖', color:'bg-[#FFCCF9]', img:'🍣'})" class="bg-white p-6 rounded-[2rem] shadow-sm flex items-center gap-5 cursor-pointer hover:shadow-md border border-slate-50 active:scale-95">
                                 <div class="w-16 h-16 bg-[#FFCCF9] rounded-2xl flex items-center justify-center text-3xl shadow-inner">🍣</div>
-                                <div class="flex-1"><span class="text-[10px] font-bold text-gray-300 uppercase tracking-widest">在地</span><h4 class="font-black text-lg text-slate-700 leading-tight">美食推薦</h4></div>
+                                <div class="flex-1"><span class="text-[10px] font-bold text-gray-300 uppercase">美食</span><h4 class="font-black text-lg text-slate-700 leading-tight">吃貨攻略</h4></div>
                                 <i data-lucide="chevron-right" class="text-slate-200"></i>
                             </div>
                         </div>
@@ -429,78 +417,135 @@
         };
 
         const renderFavorite = () => `
-            <div class="space-y-6 fade-in">
+            <div class="space-y-6 fade-in pb-10">
                 <div class="flex justify-between items-center"><h3 class="text-2xl font-black text-[#FF85A1]">我的收藏 ❤️</h3>
-                    <div class="flex gap-2"><button onclick="addFolder()" class="bg-[#FF85A1] text-white p-2.5 rounded-xl shadow-md active:scale-90"><i data-lucide="folder-plus" class="w-5 h-5"></i></button></div>
+                    <div class="flex gap-2"><button onclick="addFolder()" class="bg-[#FF85A1] text-white p-2.5 rounded-xl shadow-md active:scale-90 transition-all"><i data-lucide="folder-plus" class="w-5 h-5"></i></button></div>
                 </div>
                 <div class="flex gap-3 overflow-x-auto no-scrollbar py-2 px-1">
                     ${state.folders.map(f => `<div class="relative flex-shrink-0 group"><button onclick="window.state.activeFolder='${f}'; render()" class="px-6 py-3 rounded-2xl font-black whitespace-nowrap text-sm transition-all ${state.activeFolder===f ? 'folder-active':'bg-white text-slate-400 border border-slate-100'}">${f}</button>${f !== "預設收藏" ? `<button onclick="deleteFolder('${f}')" class="absolute -top-1 -right-1 bg-red-400 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"><i data-lucide="x" class="w-3 h-3"></i></button>` : ''}</div>`).join('')}
                 </div>
                 <div class="grid grid-cols-2 gap-4 pb-10">
-                    ${state.favorites.filter(f=> (f.folder || "預設收藏") === state.activeFolder).map(f => `<div class="bg-white rounded-[2rem] overflow-hidden shadow-sm border border-slate-50 relative group"><img src="${f.img || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=400'}" class="w-full h-36 object-cover group-hover:scale-110 transition-transform"><div class="p-4"><h4 class="font-black text-slate-700 text-sm truncate">${f.name}</h4><div class="flex justify-between items-center mt-2"><button onclick="window.open('https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(f.name)}')" class="text-[10px] font-bold text-[#8EC5FC]">導航</button><button onclick="deleteDocById('favorites', '${f.id}')" class="text-slate-300 hover:text-red-400 active:scale-90"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div></div>`).join('') || `<div class="col-span-2 py-20 text-center text-slate-300 font-bold italic">尚無任何收藏項目</div>`}
+                    ${state.favorites.filter(f=> (f.folder || "預設收藏") === state.activeFolder).map(f => `<div class="bg-white rounded-[2rem] overflow-hidden shadow-sm border border-slate-50 relative group"><img src="${f.img || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=400'}" onerror="handleImageError(this)" class="w-full h-36 object-cover group-hover:scale-110 transition-transform"><div class="p-4"><h4 class="font-black text-slate-700 text-sm truncate">${f.name}</h4><div class="flex justify-between items-center mt-2"><button onclick="window.open('https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(f.name)}')" class="text-[10px] font-bold text-[#8EC5FC]">導航</button><button onclick="deleteDocById('favorites', '${f.id}')" class="text-slate-300 hover:text-red-400 active:scale-90 transition-all"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div></div>`).join('') || `<div class="col-span-2 py-20 text-center text-slate-300 font-bold italic">該區尚無收藏</div>`}
                 </div>
             </div>`;
 
-        // --- 全域功能函數 ---
+        const renderItinerary = () => `
+            <div class="space-y-6 fade-in pb-10">
+                <div class="flex justify-between items-center"><h3 class="text-2xl font-black text-[#FFA45B]">行程計畫 🗺️</h3><button onclick="addItin()" class="w-12 h-12 bg-[#FFA45B] text-white rounded-2xl shadow-lg flex items-center justify-center active:scale-90 transition-all"><i data-lucide="plus"></i></button></div>
+                <div class="bg-white p-1.5 rounded-[1.8rem] flex shadow-inner border border-slate-100"><button onclick="window.state.activeItinTab='personal'; render()" class="flex-1 py-3 rounded-[1.5rem] font-black text-sm transition-all ${state.activeItinTab==='personal'?'bg-[#FFA45B] text-white shadow-md':'text-slate-400'}">個人</button><button onclick="window.state.activeItinTab='shared'; render()" class="flex-1 py-3 rounded-[1.5rem] font-black text-sm transition-all ${state.activeItinTab==='shared'?'bg-[#FF85A1] text-white shadow-md':'text-slate-400'}">共享</button></div>
+                <div class="space-y-4">
+                    ${state.itineraries.filter(i => (i.type || 'personal') === state.activeItinTab).map(i => `<div class="bg-white p-5 rounded-[2.2rem] shadow-sm flex items-center gap-5 border border-slate-50 active:scale-98 transition-transform"><div class="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center text-2xl">${state.activeItinTab==='personal'?'📌':'🤝'}</div><div class="flex-1"><h4 class="font-black text-slate-700 text-lg leading-tight">${i.title}</h4><p class="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">${i.date}</p></div><button onclick="deleteDocById('itineraries', '${i.id}')" class="text-slate-200 hover:text-red-400 p-2 active:scale-90"><i data-lucide="trash-2" class="w-5 h-5"></i></button></div>`).join('') || `<p class="py-20 text-center text-slate-300 font-bold italic">目前無行程計畫</p>`}
+                </div>
+            </div>`;
+
+        const renderCalorie = () => {
+            const total = state.calories.reduce((sum, i) => sum + i.cal, 0);
+            return `
+            <div class="space-y-6 fade-in pb-10">
+                <div class="bg-[#FFCCF9] p-10 rounded-[3rem] text-center shadow-xl relative overflow-hidden"><div class="relative z-10"><p class="text-[#FF85A1] font-black text-xs tracking-widest uppercase mb-1">今日預算</p><div class="text-6xl font-black text-white drop-shadow-md">${total} <span class="text-xl">kcal</span></div></div><i data-lucide="flame" class="absolute -bottom-10 -left-10 w-48 h-48 text-white opacity-25"></i></div>
+                <div class="bg-white p-7 rounded-[2.5rem] space-y-4 border border-slate-50 shadow-sm"><div class="flex flex-col sm:flex-row gap-3"><input id="cal-name" class="flex-1 bg-slate-50 p-4 rounded-2xl text-sm border-2 border-transparent focus:border-[#FFCCF9]/50 outline-none" placeholder="吃了什麼？"><input id="cal-val" class="sm:w-28 bg-slate-50 p-4 rounded-2xl text-sm border-2 border-transparent focus:border-[#FFCCF9]/50 outline-none" placeholder="kcal" type="number"></div><button onclick="addCal()" class="w-full bg-[#FF85A1] text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all">記錄美味 🍱</button></div>
+                <div class="space-y-3">${state.calories.map(c => `<div class="bg-white/80 p-4 rounded-2xl flex justify-between items-center border border-white shadow-sm scale-in"><span class="font-bold text-slate-600">${c.name}</span><div class="flex items-center gap-4"><span class="text-[#FF85A1] font-black">${c.cal} kcal</span><button onclick="deleteDocById('calories', '${c.id}')" class="text-slate-300 hover:text-red-400 active:scale-90"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div>`).join('')}</div>
+            </div>`;
+        };
+
+        const renderJournal = () => `
+            <div class="space-y-6 fade-in pb-10">
+                <h3 class="text-2xl font-black text-[#FFD1A4]">心情日記 ✍️</h3>
+                <div class="bg-white p-6 rounded-[2.5rem] space-y-4 border border-slate-50 shadow-sm"><textarea id="jou-text" class="w-full min-h-[160px] bg-slate-50 p-5 rounded-3xl outline-none text-slate-600 border-2 border-transparent focus:border-[#FFD1A4]/50" placeholder="這段旅程有什麼驚喜？"></textarea><button onclick="addJou()" class="w-full bg-[#FFD1A4] text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all">封存今日 ✨</button></div>
+                <div class="space-y-4">${state.journals.sort((a,b) => b.time - a.time).map(j => `<div class="bg-white p-6 rounded-[2.5rem] shadow-sm relative group border border-slate-50 scale-in"><div class="flex justify-between items-center mb-3"><p class="text-[10px] font-black text-slate-300 uppercase tracking-widest">${j.date}</p><button onclick="deleteDocById('journals', '${j.id}')" class="text-slate-200 hover:text-red-400 transition-colors active:scale-90"><i data-lucide="trash" class="w-4 h-4"></i></button></div><p class="text-slate-600 text-sm font-medium leading-relaxed">${j.content}</p></div>`).join('')}</div>
+            </div>`;
+
+        const renderChecklist = () => `
+            <div class="space-y-6 fade-in pb-10">
+                <h3 class="text-2xl font-black text-[#56D8D0]">行李清單 ✅</h3>
+                <div class="bg-white p-5 rounded-[2.2rem] shadow-sm flex gap-3 border border-slate-50"><input id="check-item" class="flex-1 bg-slate-50 p-4 rounded-2xl text-sm border-2 border-transparent focus:border-[#56D8D0]/50 outline-none" placeholder="準備帶什麼？"><button onclick="addCheck()" class="w-14 h-14 bg-[#56D8D0] text-white rounded-2xl flex items-center justify-center active:scale-90 transition-all shadow-md"><i data-lucide="plus"></i></button></div>
+                <div class="space-y-3">${state.checklist.map(i => `<div class="bg-white p-5 rounded-3xl flex items-center gap-4 shadow-sm border border-slate-50 ${i.done ? 'opacity-50' : ''} scale-in"><button onclick="toggleCheck('${i.id}', ${i.done})" class="w-7 h-7 rounded-full border-2 border-[#56D8D0] flex items-center justify-center ${i.done ? 'bg-[#56D8D0] text-white' : ''}">${i.done ? '<i data-lucide="check" class="w-4 h-4"></i>' : ''}</button><span class="flex-1 font-bold ${i.done ? 'line-through text-slate-400' : 'text-slate-600'}">${i.item}</span><button onclick="deleteDocById('checklist', '${i.id}')" class="text-slate-200 active:scale-90 transition-all"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`).join('')}</div>
+            </div>`;
+
+        window.switchTab = (tab) => { activeTab = tab; state.selectedGuide = null; state.selectedSpot = null; render(); };
         window.openGuide = (g) => { state.selectedGuide = g; render(); };
+
+        window.detectLocation = () => {
+            return new Promise((resolve) => {
+                if (!navigator.geolocation) { resolve(); }
+                else {
+                    navigator.geolocation.getCurrentPosition((pos) => {
+                        state.activeRegion = "台北"; state.activeCountry = "台灣"; render(); resolve();
+                    }, (err) => { resolve(); }, { timeout: 3000 });
+                }
+            });
+        };
+
+        // --- Firebase 互動 ---
+
         window.addFolder = async () => {
             const n = prompt("資料夾名稱："); if (!n) return;
             if (isDemoMode) { state.folders.push(n); state.activeFolder = n; render(); }
-            else { await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'folders'), { name: n, time: Date.now() }); }
+            else { await addDoc(collection(dbInstance, 'artifacts', appId, 'users', currentUser.uid, 'folders'), { name: n, time: Date.now() }); }
         };
+
         window.deleteFolder = async (name) => {
             if (name === "預設收藏") return;
-            if (!confirm(`確定要刪除「${name}」及其收藏嗎？`)) return;
+            if (!confirm(`確定要刪除「${name}」嗎？`)) return;
             if (isDemoMode) { state.folders = state.folders.filter(x => x !== name); render(); }
-            else { try {
-                const ds = await getDocs(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'folders'));
-                const did = ds.docs.find(d => d.data().name === name)?.id;
-                if (did) await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'folders', did));
-            } catch(e) {} }
+            else {
+                try {
+                    const ds = await getDocs(collection(dbInstance, 'artifacts', appId, 'users', currentUser.uid, 'folders'));
+                    const did = ds.docs.find(d => d.data().name === name)?.id;
+                    if (did) await deleteDoc(doc(dbInstance, 'artifacts', appId, 'users', currentUser.uid, 'folders', did));
+                } catch(e) {}
+            }
             state.activeFolder = "預設收藏";
         };
+
         window.addCal = async () => {
             const n = document.getElementById('cal-name').value; const v = document.getElementById('cal-val').value;
             if(!n || !v) return;
             if (isDemoMode) { state.calories.push({id:Date.now().toString(), name:n, cal:parseInt(v)}); render(); }
-            else { await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'calories'), { name:n, cal:parseInt(v), time:Date.now() }); }
+            else { await addDoc(collection(dbInstance, 'artifacts', appId, 'users', currentUser.uid, 'calories'), { name:n, cal:parseInt(v), time:Date.now() }); }
             document.getElementById('cal-name').value = ''; document.getElementById('cal-val').value = '';
         };
+
         window.addJou = async () => {
             const t = document.getElementById('jou-text').value; if(!t) return;
             if (isDemoMode) { state.journals.push({id:Date.now().toString(), content:t, date:new Date().toLocaleDateString(), time:Date.now()}); render(); }
-            else { await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'journals'), { content:t, date:new Date().toLocaleDateString(), time:Date.now() }); }
+            else { await addDoc(collection(dbInstance, 'artifacts', appId, 'users', currentUser.uid, 'journals'), { content:t, date:new Date().toLocaleDateString(), time:Date.now() }); }
             document.getElementById('jou-text').value = '';
         };
+
         window.addItin = async () => {
             const t = prompt("行程標題："); if(!t) return;
             if (isDemoMode) { state.itineraries.push({id:Date.now().toString(), title:t, type:state.activeItinTab, date:new Date().toLocaleDateString()}); render(); }
-            else { await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'itineraries'), { title:t, type:state.activeItinTab, date:new Date().toLocaleDateString() }); }
+            else { await addDoc(collection(dbInstance, 'artifacts', appId, 'users', currentUser.uid, 'itineraries'), { title:t, type:state.activeItinTab, date:new Date().toLocaleDateString() }); }
         };
+
         window.addCheck = async () => {
             const i = document.getElementById('check-item').value; if(!i) return;
             if (isDemoMode) { state.checklist.push({id:Date.now().toString(), item:i, done:false}); render(); }
-            else { await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'checklist'), { item:i, done:false, time:Date.now() }); }
+            else { await addDoc(collection(dbInstance, 'artifacts', appId, 'users', currentUser.uid, 'checklist'), { item:i, done:false, time:Date.now() }); }
             document.getElementById('check-item').value = '';
         };
+
         window.toggleCheck = async (id, s) => { 
             if (isDemoMode) { const item = state.checklist.find(x => x.id === id); if(item) item.done = !s; render(); }
-            else { await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'checklist', id), { done: !s }); }
+            else { await updateDoc(doc(dbInstance, 'artifacts', appId, 'users', currentUser.uid, 'checklist', id), { done: !s }); }
         };
+
         window.toggleFav = async (n, img) => {
             const ex = state.favorites.find(f => f.name === n);
             if (isDemoMode) { if(ex) state.favorites = state.favorites.filter(f => f.name !== n); else state.favorites.push({id:Date.now().toString(), name:n, img, folder:state.activeFolder}); render(); }
             else {
-                if(ex) await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'favorites', ex.id));
-                else await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'favorites'), { name:n, img, folder:state.activeFolder, time:Date.now() });
+                if(ex) await deleteDoc(doc(dbInstance, 'artifacts', appId, 'users', currentUser.uid, 'favorites', ex.id));
+                else await addDoc(collection(dbInstance, 'artifacts', appId, 'users', currentUser.uid, 'favorites'), { name:n, img, folder:state.activeFolder, time:Date.now() });
             }
         };
+
         window.deleteDocById = async (col, id) => { 
             if (isDemoMode) { state[col] = state[col].filter(x => x.id !== id); render(); }
-            else { await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, col, id)); }
+            else { await deleteDoc(doc(dbInstance, 'artifacts', appId, 'users', currentUser.uid, col, id)); }
         };
 
-        // --- 選取器邏輯 ---
+        // --- 地區選取邏輯 ---
         window.openRegionPicker = () => {
             const m = document.getElementById('region-picker');
             m.classList.remove('hidden');
@@ -509,17 +554,19 @@
             document.getElementById('picker-search').value = '';
             renderPickerContent();
         };
+
         window.closePicker = () => {
             const m = document.getElementById('region-picker');
             m.classList.remove('opacity-100'); m.querySelector('div').classList.add('translate-y-full');
             setTimeout(() => m.classList.add('hidden'), 500);
         };
+
         window.handlePickerSearch = (val) => { state.searchQuery = val.trim(); state.pickerStep = state.searchQuery ? 'search' : 'continent'; renderPickerContent(); };
         window.selectContinent = (c) => { state.selectedContinent = c; state.pickerStep = 'country'; renderPickerContent(); };
         window.selectCountry = (c) => { state.selectedCountry = c; state.pickerStep = 'city'; renderPickerContent(); };
         window.selectCity = (c) => { 
             state.activeRegion = c; 
-            state.activeCountry = state.selectedCountry || (geoData.find(cont => cont.countries.some(count => count.cities.includes(c)))?.countries.find(count => count.cities.includes(c))?.name) || '台灣';
+            state.activeCountry = state.selectedCountry || '台灣';
             closePicker(); 
             render(); 
         };
@@ -532,7 +579,7 @@
                 geoData.forEach(cont => cont.countries.forEach(count => count.cities.forEach(city => {
                     if (city.includes(state.searchQuery) || count.name.includes(state.searchQuery)) results.push({ city, country: count.name, icon: cont.icon });
                 })));
-                html = `<div class="space-y-2">${results.map(r => `<button onclick="state.selectedCountry='${r.country}'; selectCity('${r.city}')" class="w-full bg-slate-50 p-4 rounded-2xl flex items-center justify-between hover:bg-[#FF85A1]/10 transition-all"><span class="font-bold text-slate-600">${r.icon} ${r.city}</span><span class="text-[10px] text-slate-400 font-black">${r.country}</span></button>`).join('') || '<p class="py-10 text-center text-slate-300 italic">查無城市</p>'}</div>`;
+                html = `<div class="space-y-2">${results.map(r => `<button onclick="state.selectedCountry='${r.country}'; selectCity('${r.city}')" class="w-full bg-slate-50 p-4 rounded-2xl flex items-center justify-between hover:bg-[#FF85A1]/10 transition-all"><span class="font-bold text-slate-600">${r.icon} ${r.city}</span><span class="text-[10px] text-slate-400 font-black tracking-tighter">${r.country}</span></button>`).join('') || '<p class="py-10 text-center text-slate-300 italic">查無符合城市</p>'}</div>`;
             } else if (state.pickerStep === 'continent') {
                 html = `<div class="grid grid-cols-2 gap-4">${geoData.map(c => `<button onclick="selectContinent('${c.continent}')" class="bg-slate-50 p-6 rounded-3xl flex flex-col items-center gap-3 border-2 border-transparent hover:border-[#FF85A1]/30 transition-all"><span class="text-4xl">${c.icon}</span><span class="font-black text-slate-600 text-sm tracking-widest">${c.continent}</span></button>`).join('')}</div>`;
             } else if (state.pickerStep === 'country') {
@@ -545,40 +592,44 @@
             container.innerHTML = html; lucide.createIcons();
         };
 
-        const renderItinerary = () => `
-            <div class="space-y-6 fade-in pb-10">
-                <div class="flex justify-between items-center"><h3 class="text-2xl font-black text-[#FFA45B]">行程計畫 🗺️</h3><button onclick="addItin()" class="w-12 h-12 bg-[#FFA45B] text-white rounded-2xl shadow-lg flex items-center justify-center active:scale-90 transition-all"><i data-lucide="plus"></i></button></div>
-                <div class="bg-white p-1.5 rounded-[1.8rem] flex shadow-inner border border-slate-100"><button onclick="window.state.activeItinTab='personal'; render()" class="flex-1 py-3 rounded-[1.5rem] font-black text-sm transition-all ${state.activeItinTab==='personal'?'bg-[#FFA45B] text-white shadow-md':'text-slate-400'}">個人</button><button onclick="window.state.activeItinTab='shared'; render()" class="flex-1 py-3 rounded-[1.5rem] font-black text-sm transition-all ${state.activeItinTab==='shared'?'bg-[#FF85A1] text-white shadow-md':'text-slate-400'}">共享</button></div>
-                <div class="space-y-4">
-                    ${state.itineraries.filter(i => (i.type || 'personal') === state.activeItinTab).map(i => `<div class="bg-white p-5 rounded-[2.2rem] shadow-sm flex items-center gap-5 border border-slate-50 active:scale-98 transition-transform"><div class="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center text-2xl">${state.activeItinTab==='personal'?'📌':'🤝'}</div><div class="flex-1"><h4 class="font-black text-slate-700 text-lg leading-tight">${i.title}</h4><p class="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">${i.date}</p></div><button onclick="deleteDocById('itineraries', '${i.id}')" class="text-slate-200 hover:text-red-400 p-2 active:scale-90"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`).join('') || `<p class="py-20 text-center text-slate-300 font-bold italic">目前無行程計畫</p>`}
-                </div>
-            </div>`;
-
-        const renderCalorie = () => {
-            const total = state.calories.reduce((sum, i) => sum + i.cal, 0);
-            return `
-            <div class="space-y-6 fade-in pb-10">
-                <div class="bg-[#FFCCF9] p-10 rounded-[3rem] text-center shadow-xl relative overflow-hidden"><div class="relative z-10"><p class="text-[#FF85A1] font-black text-xs tracking-widest uppercase mb-1">今日美食預算</p><div class="text-6xl font-black text-white drop-shadow-md">${total} <span class="text-xl">kcal</span></div></div><i data-lucide="flame" class="absolute -bottom-10 -left-10 w-48 h-48 text-white opacity-25"></i></div>
-                <div class="bg-white p-7 rounded-[2.5rem] space-y-4 border border-slate-50 shadow-sm"><div class="flex flex-col sm:flex-row gap-3"><input id="cal-name" class="flex-1 bg-slate-50 p-4 rounded-2xl text-sm border-2 border-transparent focus:border-[#FFCCF9]/50 outline-none" placeholder="吃了什麼？"><input id="cal-val" class="sm:w-28 bg-slate-50 p-4 rounded-2xl text-sm border-2 border-transparent focus:border-[#FFCCF9]/50 outline-none" placeholder="kcal" type="number"></div><button onclick="addCal()" class="w-full bg-[#FF85A1] text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all">記錄美味 🍱</button></div>
-                <div class="space-y-3">${state.calories.map(c => `<div class="bg-white/80 p-4 rounded-2xl flex justify-between items-center border border-white shadow-sm scale-in"><span class="font-bold text-slate-600">${c.name}</span><div class="flex items-center gap-4"><span class="text-[#FF85A1] font-black">${c.cal} kcal</span><button onclick="deleteDocById('calories', '${c.id}')" class="text-slate-300 hover:text-red-400 active:scale-90"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div>`).join('')}</div>
-            </div>`;
+        const setupListeners = () => {
+            if (!currentUser || !dbInstance) return;
+            const userRef = (col) => collection(dbInstance, 'artifacts', appId, 'users', currentUser.uid, col);
+            const err = (e) => console.warn(e);
+            onSnapshot(userRef('calories'), s => { state.calories = s.docs.map(d => ({id:d.id, ...d.data()})); if(activeTab==='calorie') render(); }, err);
+            onSnapshot(userRef('journals'), s => { state.journals = s.docs.map(d => ({id:d.id, ...d.data()})); if(activeTab==='journal') render(); }, err);
+            onSnapshot(userRef('itineraries'), s => { state.itineraries = s.docs.map(d => ({id:d.id, ...d.data()})); if(activeTab==='itinerary') render(); }, err);
+            onSnapshot(userRef('checklist'), s => { state.checklist = s.docs.map(d => ({id:d.id, ...d.data()})); if(activeTab==='checklist') render(); }, err);
+            onSnapshot(userRef('favorites'), s => { state.favorites = s.docs.map(d => ({id:d.id, ...d.data()})); if(activeTab==='favorite' || activeTab==='home') render(); }, err);
+            onSnapshot(userRef('folders'), s => { 
+                const f = s.docs.map(d => d.data().name);
+                state.folders = f.length > 0 ? f : ["預設收藏"];
+                if(activeTab==='favorite') render(); 
+            }, err);
         };
 
-        const renderJournal = () => `
-            <div class="space-y-6 fade-in pb-10">
-                <h3 class="text-2xl font-black text-[#FFD1A4]">心情日記 ✍️</h3>
-                <div class="bg-white p-6 rounded-[2.5rem] space-y-4 border border-slate-50 shadow-sm"><textarea id="jou-text" class="w-full min-h-[160px] bg-slate-50 p-5 rounded-3xl outline-none text-slate-600 border-2 border-transparent focus:border-[#FFD1A4]/50" placeholder="分享今天的驚喜..."></textarea><button onclick="addJou()" class="w-full bg-[#FFD1A4] text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all">封存今日 ✨</button></div>
-                <div class="space-y-4">${state.journals.sort((a,b) => b.time - a.time).map(j => `<div class="bg-white p-6 rounded-[2.5rem] shadow-sm relative group border border-slate-50 scale-in"><div class="flex justify-between items-center mb-3"><p class="text-[10px] font-black text-slate-300 uppercase tracking-widest">${j.date}</p><button onclick="deleteDocById('journals', '${j.id}')" class="text-slate-200 hover:text-red-400 transition-colors active:scale-90"><i data-lucide="trash" class="w-4 h-4"></i></button></div><p class="text-slate-600 text-sm font-medium leading-relaxed">${j.content}</p></div>`).join('')}</div>
-            </div>`;
+        const initFirebase = async () => {
+            await detectLocation(); 
+            if (isDemoMode) { render(); return; }
+            try {
+                const appInstance = initializeApp(config);
+                authInstance = getAuth(appInstance);
+                dbInstance = getFirestore(appInstance);
+                
+                const token = window['__initial_auth_token'];
+                if (token) await signInWithCustomToken(authInstance, token);
+                else await signInAnonymously(authInstance);
 
-        const renderChecklist = () => `
-            <div class="space-y-6 fade-in pb-10">
-                <h3 class="text-2xl font-black text-[#56D8D0]">行李清單 ✅</h3>
-                <div class="bg-white p-5 rounded-[2.2rem] shadow-sm flex gap-3 border border-slate-50"><input id="check-item" class="flex-1 bg-slate-50 p-4 rounded-2xl text-sm border-2 border-transparent focus:border-[#56D8D0]/50 outline-none" placeholder="準備帶什麼？"><button onclick="addCheck()" class="w-14 h-14 bg-[#56D8D0] text-white rounded-2xl flex items-center shadow-md active:scale-90 transition-all"><i data-lucide="plus"></i></button></div>
-                <div class="space-y-3">${state.checklist.map(i => `<div class="bg-white p-5 rounded-3xl flex items-center gap-4 shadow-sm border border-slate-50 ${i.done ? 'opacity-50' : ''} scale-in"><button onclick="toggleCheck('${i.id}', ${i.done})" class="w-7 h-7 rounded-full border-2 border-[#56D8D0] flex items-center justify-center ${i.done ? 'bg-[#56D8D0] text-white' : ''}">${i.done ? '<i data-lucide="check" class="w-4 h-4"></i>' : ''}</button><span class="flex-1 font-bold ${i.done ? 'line-through text-slate-400' : 'text-slate-600'}">${i.item}</span><button onclick="deleteDocById('checklist', '${i.id}')" class="text-slate-200 active:scale-90 transition-all"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`).join('')}</div>
-            </div>`;
+                onAuthStateChanged(authInstance, (user) => {
+                    currentUser = user;
+                    updateUserUI(user);
+                    if (user) setupListeners();
+                    render();
+                });
+            } catch (e) { isDemoMode = true; render(); }
+        };
 
-        window.onload = init;
+        window.onload = initFirebase;
     </script>
 </body>
 </html>
